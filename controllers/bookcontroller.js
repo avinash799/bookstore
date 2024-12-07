@@ -1,43 +1,48 @@
 import Book from "../models/Book.js";
 
-// Controller to handle search functionality
 export const searchBooks = async (req, res) => {
-    const { query } = req.query;
+    const { query, page = 1, limit = 10, sortBy = "title", sortOrder = "asc" } = req.query;
 
-    if (!query) {
-        return res.status(400).json({ message: "Search query is required" });
-    }
+    // Pagination and sorting calculation
+    const skip = (page - 1) * limit;
+    const sortDirection = sortOrder === "asc" ? 1 : -1;
 
     try {
-        // Build a case-insensitive search query
-        const regex = new RegExp(query, "i");
+        let books;
 
-        // Search books by title, author, category, and description
-        const books = await Book.find({
-            $or: [
-                { title: { $regex: regex } },
-                { author: { $regex: regex } },
-                { category: { $regex: regex } },
-                { description: { $regex: regex } },
-            ],
+
+        if (query) {
+
+            const regex = new RegExp(query, "i");
+            books = await Book.find({
+                $or: [
+                    { title: { $regex: regex } },
+                    { author: { $regex: regex } },
+                    { category: { $regex: regex } },
+                    { description: { $regex: regex } },
+                ],
+            });
+        } else {
+
+            books = await Book.find()
+                .skip(skip)
+                .limit(Number(limit))
+                .sort({ [sortBy]: sortDirection });
+        }
+
+
+        const totalBooks = await Book.countDocuments();
+
+        return res.status(200).json({
+            books,
+            totalBooks,
+            currentPage: Number(page),
+            totalPages: Math.ceil(totalBooks / limit),
+            pageSize: Number(limit),
         });
-
-        // Prioritize by title > author > category > description
-        books.sort((a, b) => {
-            // Priority for title, author, category, description
-            if (a.title.match(regex)) return -1;
-            if (b.title.match(regex)) return 1;
-            if (a.author.match(regex)) return -1;
-            if (b.author.match(regex)) return 1;
-            if (a.category.match(regex)) return -1;
-            if (b.category.match(regex)) return 1;
-            return 0;
-        });
-
-        return res.status(200).json(books);
     } catch (error) {
-        console.error("Error searching books", error);
-        return res.status(500).json({ message: "Error searching books" });
+        console.error("Error fetching books", error);
+        return res.status(500).json({ message: "Error fetching books" });
     }
 };
 
